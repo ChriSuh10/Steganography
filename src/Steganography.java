@@ -8,6 +8,12 @@ import javax.imageio.ImageIO;
 public class Steganography {
 	private static final int HIDE_BITS = 2; 
 	
+	/**
+	 * Hides message within HIDE_BITS least significant bits of the file directed by imFile
+	 * @param message       The message to be hidden, as a BitInputStream
+	 * @param imFile	    The image file (must be supported by ImageIO) to hide the message in
+	 * @throws IOException
+	 */
 	public void hide(BitInputStream message, String imFile) throws IOException {
 		BufferedImage img = null;
 		try {
@@ -45,6 +51,11 @@ public class Steganography {
 		ImageIO.write(img, "png", f);
 	}
 	
+	/**
+	 * Extract a message or image from the provided image and write it out
+	 * @param imFile  The file to read through
+	 * @param out     The BitOutputStream to write to
+	 */
 	public void unHide(String imFile, BitOutputStream out) {
 		BufferedImage img = null;
 		try {
@@ -63,7 +74,10 @@ public class Steganography {
 			}
 	}
 	
-
+	/**
+	 * Just for fun
+	 * @param imFile  The file to get the image size from
+	 */
 	private void colors(String imFile) {
 		BufferedImage img = null;
 		try {
@@ -86,8 +100,7 @@ public class Steganography {
 		}
 		
 	}
-	
-	
+
 	public static void main(String[] args) throws IOException {
 		Steganography s = new Steganography();
 		BitInputStream message = new BitInputStream("Steg/TESTINPUT.txt");
