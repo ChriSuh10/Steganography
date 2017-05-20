@@ -2,11 +2,11 @@ import java.awt.Color;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
-
 import javax.imageio.ImageIO;
 
 public class Steganography {
-	private static final int HIDE_BITS = 2; 
+	private static final int HIDE_BITS = 2;  //Number of least significant bits to use
+	private static final int INT_BITS = 32;  //Number if bits in an int
 	
 	/**
 	 * Hides message within HIDE_BITS least significant bits of the file directed by imFile
@@ -68,8 +68,8 @@ public class Steganography {
 		for (int yPos = 0; yPos < y; yPos++) 
 			for (int xPos = 0; xPos < x; xPos++) {
 				int pixel = img.getRGB(xPos, yPos);
-				pixel = pixel << 32 - HIDE_BITS;
-				pixel = pixel >>> 32 - HIDE_BITS;
+				pixel = pixel << INT_BITS - HIDE_BITS;
+				pixel = pixel >>> INT_BITS - HIDE_BITS;
 				out.writeBits(HIDE_BITS, pixel);
 			}
 	}
@@ -101,6 +101,9 @@ public class Steganography {
 		
 	}
 
+	/*
+	 * Main file for testing
+	 */
 	public static void main(String[] args) throws IOException {
 		Steganography s = new Steganography();
 		BitInputStream message = new BitInputStream("Steg/TESTINPUT.txt");
