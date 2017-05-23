@@ -9,13 +9,17 @@
 
 import java.awt.Color;
 import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
+
 import javax.imageio.ImageIO;
 
 public class Steganography {
-	private static final int HIDE_BITS = 2;  //Number of least significant bits to use
-	private static final int INT_BITS = 32;  //Number if bits in an int
+	private static final int HIDE_BITS = 2;  // Number of least significant bits to use
+	private static final int INT_BITS = 32;  // Number of bits in an int
+	private static final int LONG_BITS = 64; // Number of bits in a long
 	
 	/**
 	 * Hides message within HIDE_BITS least significant bits of the file directed by imFile
@@ -24,15 +28,36 @@ public class Steganography {
 	 * @param imFile	    The image file (must be supported by ImageIO) to hide the message in
 	 * @throws IOException
 	 */
-	public void Hide(BitInputStream message, String imFile) throws IOException {
-		BufferedImage img = ImageIO.read(new File(imFile));
+	public void hide(String messageFilePath, String imFilePath) throws IOException {
+		BitInputStream message = new BitInputStream(messageFilePath);
+		BufferedImage img = ImageIO.read(new File(imFilePath));
 		
 		boolean writing = true;
 		int y = img.getHeight();
 		int x = img.getWidth();
 		int xPos = 0;
 		int yPos = 0;
-		//int secretBits = message.readBits(HIDE_BITS);
+		long fileSize = new File(messageFilePath).length();
+		
+		// Write file size length in the first 64 blue bits of the file
+		for (int i = 0; i < LONG_BITS; i++) {
+			if (xPos >= x) {
+				yPos++;
+				xPos = 0;
+			}
+			if (yPos >= y)
+				throw new IndexOutOfBoundsException("Message too long for medium");
+			
+			long toHide = fileSize;
+			toHide = toHide >>> LONG_BITS - 1;
+			int rgb = img.getRGB(xPos, yPos);
+			rgb = rgb >>> 1;
+			rgb = rgb << 1;
+			rgb = rgb | (int) toHide;
+			img.setRGB(xPos, yPos, rgb);
+			fileSize = fileSize << 1;
+			xPos++;
+		}
 		
 		while (writing) {
 			if (xPos >= x) {
@@ -42,23 +67,16 @@ public class Steganography {
 			if (yPos >= y)
 				throw new IndexOutOfBoundsException("Message too long for medium");
 
-			/*int argb = img.getRGB(xPos, yPos);
-			argb = argb >> HIDE_BITS;
-			argb = argb << HIDE_BITS;
-			int toHide = argb | secretBits;
-			img.setRGB(xPos, yPos, toHide);
-			secretBits = message.readBits(HIDE_BITS);
-			xPos++;*/
 			Color c  = new Color(img.getRGB(xPos, yPos));
 			int red = c.getRed();
 			int green = c.getGreen();
 			int blue = c.getBlue();
-			writing = HideBits(red, green, blue, message, img, xPos, yPos);
+			writing = hideBits(red, green, blue, message, img, xPos, yPos);
 			xPos++;
 		}
-		
-		String beginning = imFile.substring(0, imFile.length() - 4);
-		String end = imFile.substring(imFile.length() - 4);
+		// Create new file with the embedded message
+		String beginning = imFilePath.substring(0, imFilePath.length() - 4);
+		String end = imFilePath.substring(imFilePath.length() - 4);
 		String newFile = beginning + "1" + end;
 		File f = new File(newFile);
 		ImageIO.write(img, "png", f);
@@ -77,7 +95,7 @@ public class Steganography {
 	 * @param yPos      y-coordinate of the pixel being modified
 	 * @return          boolean toggle representing whether the end of the file has been reached
 	 */
-	private boolean HideBits(int red, int green, int blue, BitInputStream message, 
+	private boolean hideBits(int red, int green, int blue, BitInputStream message, 
 			BufferedImage img, int xPos, int yPos) {
 		int secretBits = message.readBits(HIDE_BITS);
 		boolean writing = true;
@@ -117,20 +135,37 @@ public class Steganography {
 	 * @param out     The BitOutputStream to write to
 	 * @throws IOException 
 	 */
-	public void UnHide(String imFile, BitOutputStream out) throws IOException {
+	public void unHide(String imFile, BitOutputStream out) throws IOException {
 		BufferedImage img = ImageIO.read(new File(imFile));
 		int y = img.getHeight();
 		int x = img.getWidth();
+		int yPos = 0;
+		int xPos = 0;
+		long fileLength = 0;
 		
-		for (int yPos = 0; yPos < y; yPos++) {
-			for (int xPos = 0; xPos < x; xPos++) {
-				/*int pixel = img.getRGB(xPos, yPos);
-				pixel = pixel << INT_BITS - HIDE_BITS;
-				pixel = pixel >>> INT_BITS - HIDE_BITS;
-				out.writeBits(HIDE_BITS, pixel);*/
-				Color c = new Color(img.getRGB(xPos, yPos));
-				GetPixelBits(c.getRed(), c.getGreen(), c.getBlue(), out);
+		// Retrieve file size from first 64 bits
+		for (int i = 0; i < LONG_BITS; i++) {
+			fileLength = fileLength << 1;
+			if (xPos >= x) {
+				yPos++;
+				xPos = 0;
 			}
+			int rgb = img.getRGB(xPos, yPos);
+			rgb = rgb << INT_BITS - 1;
+			rgb = rgb >>> INT_BITS - 1;
+			fileLength = fileLength | rgb;
+			xPos++;
+		}
+		long numIterations = ((fileLength * 8)/6) + 1; // To compensate for the fact that each 
+											   // iteration only fetches 6 bits
+		for (int i = 0; i < numIterations; i++) {
+			if (xPos >= x) {
+				yPos++;
+				xPos = 0;
+			}
+			Color pixelCol = new Color(img.getRGB(xPos, yPos));
+			getPixelBits(pixelCol.getRed(), pixelCol.getGreen(), pixelCol.getBlue(), out);
+			xPos++;
 		}
 	}
 	
@@ -141,7 +176,7 @@ public class Steganography {
 	 * @param blue   Blue component of the pixel being examined
 	 * @param out    BitOutputStream to write the hidden bits to
 	 */
-	private void GetPixelBits(int red, int green, int blue, BitOutputStream out) {
+	private void getPixelBits(int red, int green, int blue, BitOutputStream out) {
 		red = red << INT_BITS - HIDE_BITS;
 		red = red >>> INT_BITS - HIDE_BITS;
 		out.writeBits(HIDE_BITS,  red);
@@ -157,7 +192,7 @@ public class Steganography {
 	 * Just for fun
 	 * @param imFile  The file to get the image size from
 	 */
-	private void Colors(String imFile) {
+	private void colors(String imFile) {
 		BufferedImage img = null;
 		try {
 		    img = ImageIO.read(new File(imFile));
@@ -184,10 +219,9 @@ public class Steganography {
 	 */
 	public static void main(String[] args) throws IOException {
 		Steganography s = new Steganography();
-		BitInputStream message = new BitInputStream("Steg/bluedevil.png");
-		s.Hide(message, "Steg/adobe.png");
+		s.hide("Steg/TESTINPUT.txt", "Steg/adobe.png");
 		BitOutputStream bos = new BitOutputStream("Steg/newFile.txt");
-		s.UnHide("Steg/adobe1.png", bos);
+		s.unHide("Steg/adobe1.png", bos);
 		bos.flush();
 	}
 }
