@@ -1,1 +1,1 @@
-# Simple stegonography program to hide messages or images in the least-significant-bits of the red, green, and blue pixels of a provided image.
+# Simple steganography program to hide messages or images in the least-significant-bits of the red, green, and blue pixels of a provided image.
