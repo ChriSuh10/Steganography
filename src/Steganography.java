@@ -24,20 +24,19 @@ public class Steganography {
 	/**
 	 * Hides message within HIDE_BITS least significant bits of the file directed by imFile
 	 * 
-	 * @param message       The message to be hidden, as a BitInputStream
-	 * @param imFile	    The image file (must be supported by ImageIO) to hide the message in
+	 * @param messageFilePath  The path of the message to hide
+	 * @param imFilePath	   The image file path (must be supported by ImageIO) to hide the message in
 	 * @throws IOException
 	 */
-	public void hide(String messageFilePath, String imFilePath) throws IOException {
-		BitInputStream message = new BitInputStream(messageFilePath);
+	public void hideMessage(String messagePath, String imFilePath) throws IOException {
 		BufferedImage img = ImageIO.read(new File(imFilePath));
-		
+		BitInputStream message = new BitInputStream(messagePath);
 		boolean writing = true;
 		int y = img.getHeight();
 		int x = img.getWidth();
 		int xPos = 0;
 		int yPos = 0;
-		long fileSize = new File(messageFilePath).length();
+		long fileSize = new File(messagePath).length();
 		
 		// Write file size length in the first 64 blue bits of the file
 		for (int i = 0; i < LONG_BITS; i++) {
@@ -97,6 +96,7 @@ public class Steganography {
 	 */
 	private boolean hideBits(int red, int green, int blue, BitInputStream message, 
 			BufferedImage img, int xPos, int yPos) {
+
 		int secretBits = message.readBits(HIDE_BITS);
 		boolean writing = true;
 		
@@ -132,11 +132,12 @@ public class Steganography {
 	/**
 	 * Extract a message or image from the provided image and write it out
 	 * @param imFile  The file to read through
-	 * @param out     The BitOutputStream to write to
+	 * @param outFile The file to create a BitOutPutStream to
 	 * @throws IOException 
 	 */
-	public void unHide(String imFile, BitOutputStream out) throws IOException {
+	public void unHideMessage(String imFile, String outFile) throws IOException {
 		BufferedImage img = ImageIO.read(new File(imFile));
+		BitOutputStream out = new BitOutputStream(outFile);
 		int y = img.getHeight();
 		int x = img.getWidth();
 		int yPos = 0;
@@ -157,7 +158,7 @@ public class Steganography {
 			xPos++;
 		}
 		long numIterations = ((fileLength * 8)/6) + 1; // To compensate for the fact that each 
-											   // iteration only fetches 6 bits
+											           // iteration only fetches 6 bits
 		for (int i = 0; i < numIterations; i++) {
 			if (xPos >= x) {
 				yPos++;
@@ -167,6 +168,7 @@ public class Steganography {
 			getPixelBits(pixelCol.getRed(), pixelCol.getGreen(), pixelCol.getBlue(), out);
 			xPos++;
 		}
+		out.flush();
 	}
 	
 	/**
@@ -219,9 +221,7 @@ public class Steganography {
 	 */
 	public static void main(String[] args) throws IOException {
 		Steganography s = new Steganography();
-		s.hide("Steg/TESTINPUT.txt", "Steg/adobe.png");
-		BitOutputStream bos = new BitOutputStream("Steg/newFile.txt");
-		s.unHide("Steg/adobe1.png", bos);
-		bos.flush();
+		s.hideMessage("Steg/TESTINPUT.txt", "Steg/bluedevil.png");
+		s.unHideMessage("Steg/bluedevil1.png", "Steg/newFile.txt");
 	}
 }
