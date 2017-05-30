@@ -13,13 +13,16 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Arrays;
 
 import javax.imageio.ImageIO;
 
 public class Steganography {
-	private static final int HIDE_BITS = 2;  // Number of least significant bits to use
-	private static final int INT_BITS = 32;  // Number of bits in an int
-	private static final int LONG_BITS = 64; // Number of bits in a long
+	private static final int HIDE_BITS = 2;  	  			     // Number of least significant bits to use
+	private static final int BYTE_BITS = 8;						 // Number of bits in a byte;
+	private static final int INT_BITS = 32;  	  			     // Number of bits in an int
+	private static final int LONG_BITS = 64; 	  			     // Number of bits in a long
+	private static final int RGB_CLEAR_HIDE_BITS = 0xFFFCFCFC;  // Clears HIDE_BITS least significant bits from getRGB 
 	
 	/**
 	 * Hides message within HIDE_BITS least significant bits of the file directed by imFile
@@ -31,54 +34,62 @@ public class Steganography {
 	public void hideMessage(String messagePath, String imFilePath) throws IOException {
 		BufferedImage img = ImageIO.read(new File(imFilePath));
 		BitInputStream message = new BitInputStream(messagePath);
-		boolean writing = true;
-		int y = img.getHeight();
-		int x = img.getWidth();
-		int xPos = 0;
-		int yPos = 0;
-		long fileSize = new File(messagePath).length();
-		
-		// Write file size length in the first 64 blue bits of the file
-		for (int i = 0; i < LONG_BITS; i++) {
-			if (xPos >= x) {
-				yPos++;
-				xPos = 0;
-			}
-			if (yPos >= y)
-				throw new IndexOutOfBoundsException("Message too long for medium");
+		try {
+			boolean writing = true;
+			int y = img.getHeight();
+			int x = img.getWidth();
+			int xPos = 0;
+			int yPos = 0;
+			long fileSize = new File(messagePath).length();
 			
-			long toHide = fileSize;
-			toHide = toHide >>> LONG_BITS - 1;
-			int rgb = img.getRGB(xPos, yPos);
-			rgb = rgb >>> 1;
-			rgb = rgb << 1;
-			rgb = rgb | (int) toHide;
-			img.setRGB(xPos, yPos, rgb);
-			fileSize = fileSize << 1;
-			xPos++;
-		}
-		
-		while (writing) {
-			if (xPos >= x) {
-				yPos++;
-				xPos = 0;
+			// Write file size length in the first 64 blue bits of the file
+			/*for (int i = 0; i < LONG_BITS; i++) {
+				if (xPos >= x) {
+					yPos++;
+					xPos = 0;
+				}
+				if (yPos >= y)
+					throw new IndexOutOfBoundsException("Message too long for medium");
+				
+				long toHide = fileSize;
+				toHide = toHide >>> LONG_BITS - 1;
+				int rgb = img.getRGB(xPos, yPos);
+				rgb = rgb >>> 1;
+				rgb = rgb << 1;
+				rgb = rgb | (int) toHide;
+				img.setRGB(xPos, yPos, rgb);
+				fileSize = fileSize << 1;
+				xPos++;
+			}*/
+			hideHeader(x, y, xPos, yPos, fileSize, img);
+			xPos = LONG_BITS % y;
+			yPos = LONG_BITS / y;
+			
+			while (writing) {
+				if (xPos >= x) {
+					yPos++;
+					xPos = 0;
+				}
+				if (yPos >= y)
+					throw new IndexOutOfBoundsException("Message too long for medium");
+	
+				Color c  = new Color(img.getRGB(xPos, yPos));
+				int red = c.getRed();
+				int green = c.getGreen();
+				int blue = c.getBlue();
+				writing = hideBits(red, green, blue, message, img, xPos, yPos);
+				xPos++;
 			}
-			if (yPos >= y)
-				throw new IndexOutOfBoundsException("Message too long for medium");
-
-			Color c  = new Color(img.getRGB(xPos, yPos));
-			int red = c.getRed();
-			int green = c.getGreen();
-			int blue = c.getBlue();
-			writing = hideBits(red, green, blue, message, img, xPos, yPos);
-			xPos++;
+			// Create new file with the embedded message
+			String beginning = imFilePath.substring(0, imFilePath.length() - 4);
+			String end = imFilePath.substring(imFilePath.length() - 3);
+			String newFile = beginning + "1." + end;
+			File f = new File(newFile);
+			ImageIO.write(img, end, f);
 		}
-		// Create new file with the embedded message
-		String beginning = imFilePath.substring(0, imFilePath.length() - 4);
-		String end = imFilePath.substring(imFilePath.length() - 4);
-		String newFile = beginning + "1" + end;
-		File f = new File(newFile);
-		ImageIO.write(img, "png", f);
+		finally {
+			message.close();
+		}
 	}
 	
 	/**
@@ -129,6 +140,114 @@ public class Steganography {
 		return writing;	
 	}
 	
+	public void hidePic(String picPath, String imFilePath) throws IOException {
+		BufferedImage message = ImageIO.read(new File(picPath));
+		BufferedImage img = ImageIO.read(new File(imFilePath));
+		//System.out.println(img.getType());
+		int x = message.getWidth();
+		int y = message.getHeight();
+		int imgXPos = 0;
+		int imgYPos = 0;
+		int imgX = img.getWidth();
+		int imgY = img.getHeight();
+		
+		// Embed original file width
+		hideHeader(x, y, imgXPos, imgYPos, x, img);
+		imgXPos = INT_BITS % y;
+		imgYPos = INT_BITS / y;
+		// Embed original file height
+		hideHeader(x, y, imgXPos, imgYPos, y, img);
+		imgXPos = (2*INT_BITS) % y;
+		imgYPos = (2*INT_BITS) / y;
+		
+		for (int r = 0; r < y; r++) {
+			for (int c = 0; c < x; c++) {
+				int hideBits = message.getRGB(c, r);
+				//System.out.println(Integer.toBinaryString(hideBits));
+				Color col = new Color(hideBits);
+				int red = col.getRed();
+				int green = col.getGreen();
+				int blue = col.getBlue();
+				/*System.out.println(Integer.toBinaryString(red));
+				System.out.println(Integer.toBinaryString(green));
+				System.out.println(Integer.toBinaryString(blue));*/
+				
+				for (int i = 0; i < BYTE_BITS / HIDE_BITS; i++) {
+					if (imgXPos >= imgX) {
+						imgYPos++;
+						imgXPos = 0;
+					}
+					if (imgYPos >= imgY)
+						throw new IndexOutOfBoundsException("Message too long for medium");
+					int rgb = img.getRGB(imgXPos, imgYPos);
+					rgb &= RGB_CLEAR_HIDE_BITS;
+					int hideFromRed = (red & 3) << 16;
+					int hideFromGreen = (green & 3) << 8;
+					int hideFromBlue = blue & 3;
+					int toHide = 255 << 24;
+					toHide |= hideFromRed;
+					toHide |= hideFromGreen;
+					toHide |= hideFromBlue;
+					rgb |= toHide;
+
+					red = red >>> HIDE_BITS;
+					green = green >>> HIDE_BITS;
+					blue = blue >>> HIDE_BITS;
+					img.setRGB(imgXPos, imgYPos, rgb);
+					imgXPos++;
+				}
+			}
+		}
+		// Create new file with the embedded message
+		String beginning = imFilePath.substring(0, imFilePath.length() - 4);
+		String end = imFilePath.substring(imFilePath.length() - 3);
+		String newFile = beginning + "2." + end;
+		File f = new File(newFile);
+		ImageIO.write(img, end, f);	
+	}
+	
+	public void hideHeader(int x, int y, int xPos, int yPos, long header, BufferedImage img) {
+		for (int i = 0; i < LONG_BITS; i++) {
+			if (xPos >= x) {
+				yPos++;
+				xPos = 0;
+			}
+			if (yPos >= y)
+				throw new IndexOutOfBoundsException("Message too long for medium");
+			
+			long toHide = header;
+			toHide = toHide >>> LONG_BITS - 1;
+			int rgb = img.getRGB(xPos, yPos);
+			rgb = rgb >>> 1;
+			rgb = rgb << 1;
+			rgb = rgb | (int) toHide;
+			img.setRGB(xPos, yPos, rgb);
+			header = header << 1;
+			xPos++;
+		}
+	}
+	
+	public void hideHeader(int x, int y, int xPos, int yPos, int header, BufferedImage img) {
+		for (int i = 0; i < INT_BITS; i++) {
+			if (xPos >= x) {
+				yPos++;
+				xPos = 0;
+			}
+			if (yPos >= y)
+				throw new IndexOutOfBoundsException("Message too long for medium");
+			
+			int toHide = header;
+			toHide = toHide >>> INT_BITS - 1;
+			int rgb = img.getRGB(xPos, yPos);
+			rgb = rgb >>> 1;
+			rgb = rgb << 1;
+			rgb = rgb | toHide;
+			img.setRGB(xPos, yPos, rgb);
+			header = header << 1;
+			xPos++;
+		}
+	}
+	
 	/**
 	 * Extract a message or image from the provided image and write it out
 	 * @param imFile  The file to read through
@@ -142,10 +261,12 @@ public class Steganography {
 		int x = img.getWidth();
 		int yPos = 0;
 		int xPos = 0;
-		long fileLength = 0;
+		long fileLength = retrieveLongHeader(x, y, xPos, yPos, img);
+		xPos = LONG_BITS % y;
+		yPos = LONG_BITS / y;
 		
 		// Retrieve file size from first 64 bits
-		for (int i = 0; i < LONG_BITS; i++) {
+		/*for (int i = 0; i < LONG_BITS; i++) {
 			fileLength = fileLength << 1;
 			if (xPos >= x) {
 				yPos++;
@@ -156,7 +277,7 @@ public class Steganography {
 			rgb = rgb >>> INT_BITS - 1;
 			fileLength = fileLength | rgb;
 			xPos++;
-		}
+		}*/
 		long numIterations = ((fileLength * 8)/6) + 1; // To compensate for the fact that each 
 											           // iteration only fetches 6 bits
 		for (int i = 0; i < numIterations; i++) {
@@ -190,6 +311,142 @@ public class Steganography {
 		out.writeBits(HIDE_BITS,  blue);
 	}
 	
+	private long retrieveLongHeader(int x, int y, int xPos, int yPos, BufferedImage img) {
+		long header = 0;
+		for (int i = 0; i < LONG_BITS; i++) {
+			header = header << 1;
+			if (xPos >= x) {
+				yPos++;
+				xPos = 0;
+			}
+			int rgb = img.getRGB(xPos, yPos);
+			rgb = rgb << INT_BITS - 1;
+			rgb = rgb >>> INT_BITS - 1;
+			header = header | rgb;
+			xPos++;
+		}
+		return header;
+	}
+	
+	private int retrieveIntHeader(int x, int y, int xPos, int yPos, BufferedImage img) {
+		int header = 0;
+		for (int i = 0; i < INT_BITS; i++) {
+			header = header << 1;
+			if (xPos >= x) {
+				yPos++;
+				xPos = 0;
+			}
+			int rgb = img.getRGB(xPos, yPos);
+			rgb = rgb << INT_BITS - 1;
+			rgb = rgb >>> INT_BITS - 1;
+			header = header | rgb;
+			xPos++;
+		}
+		return header;
+	}
+	
+	public void unHidePic(String imFile, String recoveredName) throws IOException {
+		BufferedImage img = ImageIO.read(new File(imFile));
+		
+		int imgX = img.getWidth();
+		int imgY = img.getHeight();
+		int xPos = 0;
+		int yPos = 0;
+		
+		int writeX = retrieveIntHeader(imgX, imgY, xPos, yPos, img);
+		xPos = INT_BITS % imgY;
+		yPos = INT_BITS / imgY;
+		int writeY = retrieveIntHeader(imgX, imgY, xPos, yPos, img);
+		xPos = (2*INT_BITS) % imgY;
+		yPos = (2*INT_BITS) / imgY;
+		System.out.println(writeX);
+		System.out.println(writeY);
+		BufferedImage writeTo = new BufferedImage(writeX, writeY, BufferedImage.TYPE_4BYTE_ABGR);
+		int red = 0;
+		int green = 0;
+		int blue = 0;
+		int count = 0;
+		
+		
+		//outerloop:
+		//for (yPos < imgY; r++) {
+			//for (int c = 0; c < imgX; c++) {
+		int index = (yPos * imgY) + xPos;
+		int c = 0; 
+		int r = 0;
+		
+		while (yPos < imgY) {
+			if (xPos >= imgX) {
+				yPos++;
+				xPos = 0;
+			}
+
+			if (count == BYTE_BITS / HIDE_BITS) {
+				if (c >= writeX) {
+					r++;
+					c = 0;
+				}
+				if (r >= writeY)
+					break;
+				count = 0;
+				int toWrite = 255 << 8;
+				toWrite |= red;
+				toWrite = toWrite << 8;
+				toWrite |= green;
+				toWrite = toWrite << 8;
+				toWrite |= blue;
+				/*System.out.println(xPos + "," + yPos);
+				System.out.println(Integer.toBinaryString(toWrite));*/
+				writeTo.setRGB(c, r, toWrite);
+				c++;
+			}
+			int rgb = img.getRGB(xPos, yPos);
+			Color col = new Color(rgb);
+			int colRed = (col.getRed() & 3) << 6;
+			int colGreen = (col.getGreen() & 3) << 6;
+			int colBlue = (col.getBlue() & 3) << 6;
+			red = red >> HIDE_BITS;
+			green = green >> HIDE_BITS;
+			blue = blue >> HIDE_BITS;
+			red |= colRed;
+			green |= colGreen;
+			blue |= colBlue;
+			/*System.out.println(Integer.toBinaryString(red));
+			System.out.println(Integer.toBinaryString(green));
+			System.out.println(Integer.toBinaryString(blue));*/
+			count++;
+			xPos++;
+		}
+		//}
+		// Create new file with the embedded message
+		String end = recoveredName.substring(recoveredName.length() - 3);
+		File f = new File(recoveredName);
+		ImageIO.write(writeTo, end, f);
+	}
+	
+	public void getDifference(String ogFilePath, String modFilePath) throws IOException {
+		BufferedImage og = ImageIO.read(new File(ogFilePath));
+		BufferedImage mod = ImageIO.read(new File(modFilePath));
+		int x = mod.getWidth();
+		int y = mod.getHeight();
+		int a = og.getHeight();
+		int b = og.getWidth();
+		
+		for (int r = 0; r < y; r++) {
+			for (int c = 0; c < x; c++) {
+				int ogPix = og.getRGB(c, r);
+				int modPix = mod.getRGB(c, r);
+				int diff = ogPix - modPix;
+				mod.setRGB(c, r, diff);
+			}
+		}
+		String beginning = modFilePath.substring(0, modFilePath.length() - 4);
+		String end = modFilePath.substring(modFilePath.length() - 3);
+		String newFile = beginning + "Diff." + end;
+		File f = new File(newFile);
+		ImageIO.write(mod, end, f);
+	}
+	
 	/**
 	 * Just for fun
 	 * @param imFile  The file to get the image size from
@@ -215,13 +472,48 @@ public class Steganography {
 			e.printStackTrace();
 		}
 	}
+	
+	private void smallPic() throws IOException {
+		BufferedImage img = new BufferedImage(5, 5, BufferedImage.TYPE_3BYTE_BGR);
+		int[] rand = new int[25];
+		for (int i = 0; i < rand.length; i++)
+			rand[i] = (int) (Math.random() * Integer.MAX_VALUE);
+		
+		System.out.println(Arrays.toString(rand));
+		int count = 0;
+		for (int r = 0; r < 5; r++) {
+			for (int c = 0; c < 5; c++) {
+				img.setRGB(c, r, rand[count]);
+				count++;
+			}
+		}
+		// Create new file with the embedded message
+		File f = new File("Steg/RANDOM.png");
+		ImageIO.write(img, "png", f);
+	}
+	
+	public void binaryStringtoInt(String s) {
+		int ret = 0;
+		for (int i = 0; i < s.length(); i++) {
+			double factor = Math.pow(2, i);
+			int bit = Integer.parseInt(s.charAt(s.length() - i - 1) + "");
+			ret += bit * factor;
+		}
+		System.out.println(ret);
+	}
 
 	/*
 	 * Main file for testing
 	 */
 	public static void main(String[] args) throws IOException {
 		Steganography s = new Steganography();
-		s.hideMessage("Steg/TESTINPUT.txt", "Steg/bluedevil.png");
-		s.unHideMessage("Steg/bluedevil1.png", "Steg/newFile.txt");
+		/*s.hideMessage("Steg/TESTINPUT.txt", "Steg/coutinho.png");
+		s.unHideMessage("Steg/coutinho1.png", "Steg/newFile.txt");
+		s.getDifference("Steg/coutinho.png", "Steg/coutinho1.png");
+		/*s.hideMessage("Steg/StrangeCases.txt", "Steg/bluedevil.png");
+		s.unHideMessage("Steg/bluedevil1.png", "Steg/newFile.txt");		*/
+		s.hidePic("Steg/bluedevil.png", "Steg/coutinho.png");
+		s.unHidePic("Steg/coutinho2.png", "Steg/newFile.png");
+		s.getDifference("Steg/coutinho.png", "Steg/coutinho2.png");
 	}
 }
