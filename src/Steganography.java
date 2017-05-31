@@ -22,7 +22,7 @@ public class Steganography {
 	private static final int BYTE_BITS = 8;						 // Number of bits in a byte;
 	private static final int INT_BITS = 32;  	  			     // Number of bits in an int
 	private static final int LONG_BITS = 64; 	  			     // Number of bits in a long
-	private static final int RGB_CLEAR_HIDE_BITS = 0xFFFCFCFC;  // Clears HIDE_BITS least significant bits from getRGB 
+	private static final int RGB_CLEAR_HIDE_BITS = 0xFFFCFCFC;   // Clears HIDE_BITS least significant bits from getRGB 
 	
 	/**
 	 * Hides message within HIDE_BITS least significant bits of the file directed by imFile
@@ -42,25 +42,6 @@ public class Steganography {
 			int yPos = 0;
 			long fileSize = new File(messagePath).length();
 			
-			// Write file size length in the first 64 blue bits of the file
-			/*for (int i = 0; i < LONG_BITS; i++) {
-				if (xPos >= x) {
-					yPos++;
-					xPos = 0;
-				}
-				if (yPos >= y)
-					throw new IndexOutOfBoundsException("Message too long for medium");
-				
-				long toHide = fileSize;
-				toHide = toHide >>> LONG_BITS - 1;
-				int rgb = img.getRGB(xPos, yPos);
-				rgb = rgb >>> 1;
-				rgb = rgb << 1;
-				rgb = rgb | (int) toHide;
-				img.setRGB(xPos, yPos, rgb);
-				fileSize = fileSize << 1;
-				xPos++;
-			}*/
 			hideHeader(x, y, xPos, yPos, fileSize, img);
 			xPos = LONG_BITS % y;
 			yPos = LONG_BITS / y;
@@ -140,10 +121,17 @@ public class Steganography {
 		return writing;	
 	}
 	
+	/**
+	 * Hides the given picture's information within HIDE_BITS least significant bits of
+	 * red, green, and blue pixels of another image
+	 * 
+	 * @param picPath       The path of the file to hide
+	 * @param imFilePath    The path of the file to hide picPath within
+	 * @throws IOException
+	 */
 	public void hidePic(String picPath, String imFilePath) throws IOException {
 		BufferedImage message = ImageIO.read(new File(picPath));
 		BufferedImage img = ImageIO.read(new File(imFilePath));
-		//System.out.println(img.getType());
 		int x = message.getWidth();
 		int y = message.getHeight();
 		int imgXPos = 0;
@@ -163,14 +151,10 @@ public class Steganography {
 		for (int r = 0; r < y; r++) {
 			for (int c = 0; c < x; c++) {
 				int hideBits = message.getRGB(c, r);
-				//System.out.println(Integer.toBinaryString(hideBits));
 				Color col = new Color(hideBits);
 				int red = col.getRed();
 				int green = col.getGreen();
 				int blue = col.getBlue();
-				/*System.out.println(Integer.toBinaryString(red));
-				System.out.println(Integer.toBinaryString(green));
-				System.out.println(Integer.toBinaryString(blue));*/
 				
 				for (int i = 0; i < BYTE_BITS / HIDE_BITS; i++) {
 					if (imgXPos >= imgX) {
@@ -206,7 +190,18 @@ public class Steganography {
 		ImageIO.write(img, end, f);	
 	}
 	
-	public void hideHeader(int x, int y, int xPos, int yPos, long header, BufferedImage img) {
+	/**
+	 * Helper method for embedding header information as a long in the HIDE_BITS
+	 * least significant bits of the pixel data
+	 * 
+	 * @param x       Width of the image that will hold the data
+	 * @param y       Height of the image that will hold the data
+	 * @param xPos    x-coordinate of the pixel to begin writing information from
+	 * @param yPos    y-coordinate of the pixel to begin writing information from
+	 * @param header  Long to embed 
+	 * @param img     Image to embed header within
+	 */
+	private void hideHeader(int x, int y, int xPos, int yPos, long header, BufferedImage img) {
 		for (int i = 0; i < LONG_BITS; i++) {
 			if (xPos >= x) {
 				yPos++;
@@ -227,7 +222,18 @@ public class Steganography {
 		}
 	}
 	
-	public void hideHeader(int x, int y, int xPos, int yPos, int header, BufferedImage img) {
+	/**
+	 * Helper method for embedding header information as a int in the HIDE_BITS
+	 * least significant bits of the pixel data
+	 * 
+	 * @param x       Width of the image that will hold the data
+	 * @param y       Height of the image that will hold the data
+	 * @param xPos    x-coordinate of the pixel to begin writing information from
+	 * @param yPos    y-coordinate of the pixel to begin writing information from
+	 * @param header  int to embed 
+	 * @param img     Image to embed header within
+	 */
+	private void hideHeader(int x, int y, int xPos, int yPos, int header, BufferedImage img) {
 		for (int i = 0; i < INT_BITS; i++) {
 			if (xPos >= x) {
 				yPos++;
@@ -250,6 +256,7 @@ public class Steganography {
 	
 	/**
 	 * Extract a message or image from the provided image and write it out
+	 * 
 	 * @param imFile  The file to read through
 	 * @param outFile The file to create a BitOutPutStream to
 	 * @throws IOException 
@@ -265,19 +272,6 @@ public class Steganography {
 		xPos = LONG_BITS % y;
 		yPos = LONG_BITS / y;
 		
-		// Retrieve file size from first 64 bits
-		/*for (int i = 0; i < LONG_BITS; i++) {
-			fileLength = fileLength << 1;
-			if (xPos >= x) {
-				yPos++;
-				xPos = 0;
-			}
-			int rgb = img.getRGB(xPos, yPos);
-			rgb = rgb << INT_BITS - 1;
-			rgb = rgb >>> INT_BITS - 1;
-			fileLength = fileLength | rgb;
-			xPos++;
-		}*/
 		long numIterations = ((fileLength * 8)/6) + 1; // To compensate for the fact that each 
 											           // iteration only fetches 6 bits
 		for (int i = 0; i < numIterations; i++) {
@@ -311,6 +305,16 @@ public class Steganography {
 		out.writeBits(HIDE_BITS,  blue);
 	}
 	
+	/**
+	 * Retrieve a long embedded as a header
+	 * 
+	 * @param x     Width of the image that holds the data
+	 * @param y     Height of the image that holds the data
+	 * @param xPos  x-coordinate of the pixel to begin retrieving data from
+	 * @param yPos  y-coordinate of the pixel to begin retrieving data from
+	 * @param img   Image that holds the information
+	 * @return      A long embedded within img as a header
+	 */
 	private long retrieveLongHeader(int x, int y, int xPos, int yPos, BufferedImage img) {
 		long header = 0;
 		for (int i = 0; i < LONG_BITS; i++) {
@@ -328,6 +332,16 @@ public class Steganography {
 		return header;
 	}
 	
+	/**
+	 * Retrieve an int embedded as a header
+	 * 
+	 * @param x     Width of the image that holds the data
+	 * @param y     Height of the image that holds the data
+	 * @param xPos  x-coordinate of the pixel to begin retrieving data from
+	 * @param yPos  y-coordinate of the pixel to begin retrieving data from
+	 * @param img   Image that holds the information
+	 * @return      An int embedded within img as a header
+	 */
 	private int retrieveIntHeader(int x, int y, int xPos, int yPos, BufferedImage img) {
 		int header = 0;
 		for (int i = 0; i < INT_BITS; i++) {
@@ -345,6 +359,14 @@ public class Steganography {
 		return header;
 	}
 	
+	/**
+	 * Retrieves a hidden image from within the HIDE_BITS least significant bits 
+	 * of the red, green, and blue pixels of the provided image
+	 * 
+	 * @param imFile         Path of the image file to extract data from
+	 * @param recoveredName  Path of the image file to write extracted data to
+	 * @throws IOException   
+	 */
 	public void unHidePic(String imFile, String recoveredName) throws IOException {
 		BufferedImage img = ImageIO.read(new File(imFile));
 		
@@ -359,18 +381,12 @@ public class Steganography {
 		int writeY = retrieveIntHeader(imgX, imgY, xPos, yPos, img);
 		xPos = (2*INT_BITS) % imgY;
 		yPos = (2*INT_BITS) / imgY;
-		System.out.println(writeX);
-		System.out.println(writeY);
 		BufferedImage writeTo = new BufferedImage(writeX, writeY, BufferedImage.TYPE_4BYTE_ABGR);
 		int red = 0;
 		int green = 0;
 		int blue = 0;
 		int count = 0;
 		
-		
-		//outerloop:
-		//for (yPos < imgY; r++) {
-			//for (int c = 0; c < imgX; c++) {
 		int index = (yPos * imgY) + xPos;
 		int c = 0; 
 		int r = 0;
@@ -395,8 +411,6 @@ public class Steganography {
 				toWrite |= green;
 				toWrite = toWrite << 8;
 				toWrite |= blue;
-				/*System.out.println(xPos + "," + yPos);
-				System.out.println(Integer.toBinaryString(toWrite));*/
 				writeTo.setRGB(c, r, toWrite);
 				c++;
 			}
@@ -411,19 +425,24 @@ public class Steganography {
 			red |= colRed;
 			green |= colGreen;
 			blue |= colBlue;
-			/*System.out.println(Integer.toBinaryString(red));
-			System.out.println(Integer.toBinaryString(green));
-			System.out.println(Integer.toBinaryString(blue));*/
 			count++;
 			xPos++;
 		}
-		//}
 		// Create new file with the embedded message
 		String end = recoveredName.substring(recoveredName.length() - 3);
 		File f = new File(recoveredName);
 		ImageIO.write(writeTo, end, f);
 	}
 	
+	/**
+	 * For two images of the exact same dimensions, creates a new image in which
+	 * each pixel is the difference of the corresponding pixels of the provided 
+	 * images
+	 * 
+	 * @param ogFilePath   Path of the first image, to be subtracted from
+	 * @param modFilePath  Path of the second image, to subtract from the first
+	 * @throws IOException
+	 */
 	public void getDifference(String ogFilePath, String modFilePath) throws IOException {
 		BufferedImage og = ImageIO.read(new File(ogFilePath));
 		BufferedImage mod = ImageIO.read(new File(modFilePath));
@@ -473,6 +492,10 @@ public class Steganography {
 		}
 	}
 	
+	/**
+	 * Just for testing
+	 * @throws IOException
+	 */
 	private void smallPic() throws IOException {
 		BufferedImage img = new BufferedImage(5, 5, BufferedImage.TYPE_3BYTE_BGR);
 		int[] rand = new int[25];
@@ -492,6 +515,10 @@ public class Steganography {
 		ImageIO.write(img, "png", f);
 	}
 	
+	/**
+	 * Just for testing
+	 * @param s
+	 */
 	public void binaryStringtoInt(String s) {
 		int ret = 0;
 		for (int i = 0; i < s.length(); i++) {
@@ -507,11 +534,10 @@ public class Steganography {
 	 */
 	public static void main(String[] args) throws IOException {
 		Steganography s = new Steganography();
-		/*s.hideMessage("Steg/TESTINPUT.txt", "Steg/coutinho.png");
+		s.hideMessage("Steg/TESTINPUT.txt", "Steg/coutinho.png");
 		s.unHideMessage("Steg/coutinho1.png", "Steg/newFile.txt");
 		s.getDifference("Steg/coutinho.png", "Steg/coutinho1.png");
-		/*s.hideMessage("Steg/StrangeCases.txt", "Steg/bluedevil.png");
-		s.unHideMessage("Steg/bluedevil1.png", "Steg/newFile.txt");		*/
+
 		s.hidePic("Steg/bluedevil.png", "Steg/coutinho.png");
 		s.unHidePic("Steg/coutinho2.png", "Steg/newFile.png");
 		s.getDifference("Steg/coutinho.png", "Steg/coutinho2.png");
