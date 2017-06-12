@@ -18,14 +18,40 @@ import java.util.Arrays;
 import javax.imageio.ImageIO;
 
 public class Steganography {
-	private static final int HIDE_BITS = 2;  	  			     // Number of least significant bits to use
-	private static final int BYTE_BITS = 8;						 // Number of bits in a byte;
-	private static final int INT_BITS = 32;  	  			     // Number of bits in an int
-	private static final int LONG_BITS = 64; 	  			     // Number of bits in a long
-	private static final int RGB_CLEAR_HIDE_BITS = 0xFFFCFCFC;   // Clears HIDE_BITS least significant bits from getRGB 
+	private final int HideBits;                      
+	private final int RGBClearHideBits;               
+	private final int GetLastHideBits;               
+	private final int ClearHideBits;
+	private static final int BYTE_BITS = 8;   // Number of bits in a byte;
+	private static final int INT_BITS = 32;   // Number of bits in an int
+	private static final int LONG_BITS = 64;  // Number of bits in a long
 	
 	/**
-	 * Hides message within HIDE_BITS least significant bits of the file directed by imFile
+	 * Default Constructor
+	 */
+	public Steganography() {
+		this.HideBits = 2;
+		this.RGBClearHideBits = 0xFFFCFCFC;
+		this.GetLastHideBits = 3;
+		this.ClearHideBits = 0x7FFFFFFC;
+	}
+	
+	/**
+	 * 
+	 * @param numHide  Number of bits to hide data in
+	 * @param clear    Clears HideBits least significant bits from getRGB
+	 * @param get      Gets last HideBits bits from rgb ints
+	 * @param clear    Clears numHide least significant bits from red, green, and blue ints
+	 */
+	public Steganography(int numHide, int rgb, int get, int clear) {
+		this.HideBits = numHide;
+		this.RGBClearHideBits = rgb;
+		this.GetLastHideBits = get;
+		this.ClearHideBits = clear;
+	}
+	
+	/**
+	 * Hides message within HideBits least significant bits of the file directed by imFile
 	 * 
 	 * @param messageFilePath  The path of the message to hide
 	 * @param imFilePath	   The image file path (must be supported by ImageIO) to hide the message in
@@ -89,30 +115,27 @@ public class Steganography {
 	private boolean hideBits(int red, int green, int blue, BitInputStream message, 
 			BufferedImage img, int xPos, int yPos) {
 
-		int secretBits = message.readBits(HIDE_BITS);
+		int secretBits = message.readBits(HideBits);
 		boolean writing = true;
 		
 		if (secretBits != -1) {
-			red = red >> HIDE_BITS;
-			red = red << HIDE_BITS;
-			red = red | secretBits;
-			secretBits = message.readBits(HIDE_BITS);
+			red &= ClearHideBits;
+			red |= secretBits;
+			secretBits = message.readBits(HideBits);
 		}
 		else 
 			writing = false;
 		
 		if (secretBits != -1) {
-			green = green >> HIDE_BITS;
-			green = green << HIDE_BITS;
-			green = green | secretBits;
-			secretBits = message.readBits(HIDE_BITS);
+			green &= ClearHideBits;
+			green |= secretBits;
+			secretBits = message.readBits(HideBits);
 		}else
 			writing = false;
 		
 		if (secretBits != -1) {
-			blue = blue >> HIDE_BITS;
-			blue = blue << HIDE_BITS;
-			blue = blue | secretBits;
+			blue &= ClearHideBits;
+			blue |= secretBits;
 		}
 		else
 			writing = false;
@@ -122,7 +145,7 @@ public class Steganography {
 	}
 	
 	/**
-	 * Hides the given picture's information within HIDE_BITS least significant bits of
+	 * Hides the given picture's information within HideBits least significant bits of
 	 * red, green, and blue pixels of another image
 	 * 
 	 * @param picPath       The path of the file to hide
@@ -156,7 +179,7 @@ public class Steganography {
 				int green = col.getGreen();
 				int blue = col.getBlue();
 				
-				for (int i = 0; i < BYTE_BITS / HIDE_BITS; i++) {
+				for (int i = 0; i < BYTE_BITS / HideBits; i++) {
 					if (imgXPos >= imgX) {
 						imgYPos++;
 						imgXPos = 0;
@@ -164,19 +187,19 @@ public class Steganography {
 					if (imgYPos >= imgY)
 						throw new IndexOutOfBoundsException("Message too long for medium");
 					int rgb = img.getRGB(imgXPos, imgYPos);
-					rgb &= RGB_CLEAR_HIDE_BITS;
-					int hideFromRed = (red & 3) << 16;
-					int hideFromGreen = (green & 3) << 8;
-					int hideFromBlue = blue & 3;
+					rgb &= RGBClearHideBits;
+					int hideFromRed = (red & GetLastHideBits) << 16;
+					int hideFromGreen = (green & GetLastHideBits) << 8;
+					int hideFromBlue = blue & GetLastHideBits;
 					int toHide = 255 << 24;
 					toHide |= hideFromRed;
 					toHide |= hideFromGreen;
 					toHide |= hideFromBlue;
 					rgb |= toHide;
 
-					red = red >>> HIDE_BITS;
-					green = green >>> HIDE_BITS;
-					blue = blue >>> HIDE_BITS;
+					red = red >>> HideBits;
+					green = green >>> HideBits;
+					blue = blue >>> HideBits;
 					img.setRGB(imgXPos, imgYPos, rgb);
 					imgXPos++;
 				}
@@ -191,7 +214,7 @@ public class Steganography {
 	}
 	
 	/**
-	 * Helper method for embedding header information as a long in the HIDE_BITS
+	 * Helper method for embedding header information as a long in the HideBits
 	 * least significant bits of the pixel data
 	 * 
 	 * @param x       Width of the image that will hold the data
@@ -223,7 +246,7 @@ public class Steganography {
 	}
 	
 	/**
-	 * Helper method for embedding header information as a int in the HIDE_BITS
+	 * Helper method for embedding header information as a int in the HideBits
 	 * least significant bits of the pixel data
 	 * 
 	 * @param x       Width of the image that will hold the data
@@ -294,15 +317,12 @@ public class Steganography {
 	 * @param out    BitOutputStream to write the hidden bits to
 	 */
 	private void getPixelBits(int red, int green, int blue, BitOutputStream out) {
-		red = red << INT_BITS - HIDE_BITS;
-		red = red >>> INT_BITS - HIDE_BITS;
-		out.writeBits(HIDE_BITS,  red);
-		green = green << INT_BITS - HIDE_BITS;
-		green = green >>> INT_BITS - HIDE_BITS;
-		out.writeBits(HIDE_BITS,  green);
-		blue = blue << INT_BITS - HIDE_BITS;
-		blue = blue >>> INT_BITS - HIDE_BITS;
-		out.writeBits(HIDE_BITS,  blue);
+		red &= GetLastHideBits;
+		green &= GetLastHideBits;
+		blue &= GetLastHideBits;
+		out.writeBits(HideBits, red);
+		out.writeBits(HideBits, green);
+		out.writeBits(HideBits, blue);
 	}
 	
 	/**
@@ -360,7 +380,7 @@ public class Steganography {
 	}
 	
 	/**
-	 * Retrieves a hidden image from within the HIDE_BITS least significant bits 
+	 * Retrieves a hidden image from within the HideBits least significant bits 
 	 * of the red, green, and blue pixels of the provided image
 	 * 
 	 * @param imFile         Path of the image file to extract data from
@@ -397,7 +417,7 @@ public class Steganography {
 				xPos = 0;
 			}
 
-			if (count == BYTE_BITS / HIDE_BITS) {
+			if (count == BYTE_BITS / HideBits) {
 				if (c >= writeX) {
 					r++;
 					c = 0;
@@ -416,12 +436,12 @@ public class Steganography {
 			}
 			int rgb = img.getRGB(xPos, yPos);
 			Color col = new Color(rgb);
-			int colRed = (col.getRed() & 3) << 6;
-			int colGreen = (col.getGreen() & 3) << 6;
-			int colBlue = (col.getBlue() & 3) << 6;
-			red = red >> HIDE_BITS;
-			green = green >> HIDE_BITS;
-			blue = blue >> HIDE_BITS;
+			int colRed = (col.getRed() & GetLastHideBits) << 6;
+			int colGreen = (col.getGreen() & GetLastHideBits) << 6;
+			int colBlue = (col.getBlue() & GetLastHideBits) << 6;
+			red = red >> HideBits;
+			green = green >> HideBits;
+			blue = blue >> HideBits;
 			red |= colRed;
 			green |= colGreen;
 			blue |= colBlue;
@@ -534,12 +554,18 @@ public class Steganography {
 	 */
 	public static void main(String[] args) throws IOException {
 		Steganography s = new Steganography();
+		long t1 = System.nanoTime();
 		s.hideMessage("Steg/TESTINPUT.txt", "Steg/coutinho.png");
 		s.unHideMessage("Steg/coutinho1.png", "Steg/newFile.txt");
 		s.getDifference("Steg/coutinho.png", "Steg/coutinho1.png");
-
+		long diffText = System.nanoTime() - t1;
+		System.out.println("Elapsed time for encoding and decoding text: " + diffText/1E9);
+			
+		long t2 = System.nanoTime();
 		s.hidePic("Steg/bluedevil.png", "Steg/coutinho.png");
 		s.unHidePic("Steg/coutinho2.png", "Steg/newFile.png");
 		s.getDifference("Steg/coutinho.png", "Steg/coutinho2.png");
+		long diffPic = System.nanoTime() - t2;
+		System.out.println("Elapsed time for encoding and decoding picture: " + diffPic/1E9);
 	}
 }
