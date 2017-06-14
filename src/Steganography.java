@@ -37,6 +37,7 @@ public class Steganography {
 	}
 	
 	/**
+	 * Constructor
 	 * 
 	 * @param numHide  Number of bits to hide data in
 	 * @param clear    Clears HideBits least significant bits from getRGB
@@ -66,12 +67,12 @@ public class Steganography {
 			int x = img.getWidth();
 			int xPos = 0;
 			int yPos = 0;
-			long fileSize = new File(messagePath).length();
-			
+			long fileSize = new File(messagePath).length();			
 			hideHeader(x, y, xPos, yPos, fileSize, img);
+			
 			xPos = LONG_BITS % y;
 			yPos = LONG_BITS / y;
-			
+
 			while (writing) {
 				if (xPos >= x) {
 					yPos++;
@@ -86,7 +87,7 @@ public class Steganography {
 				int blue = c.getBlue();
 				writing = hideBits(red, green, blue, message, img, xPos, yPos);
 				xPos++;
-			}
+			}		
 			// Create new file with the embedded message
 			String beginning = imFilePath.substring(0, imFilePath.length() - 4);
 			String end = imFilePath.substring(imFilePath.length() - 3);
@@ -504,7 +505,7 @@ public class Steganography {
 				Color c = new Color(yPos/10, xPos/10, 0);
 				img.setRGB(xPos, yPos, c.getRGB());
 		}
-		File f = new File("Steg/Gradient.png");
+		File f = new File("data/Gradient.png");
 		try {
 			ImageIO.write(img, "png", f);
 		} catch (IOException e) {
@@ -531,7 +532,7 @@ public class Steganography {
 			}
 		}
 		// Create new file with the embedded message
-		File f = new File("Steg/RANDOM.png");
+		File f = new File("data/RANDOM.png");
 		ImageIO.write(img, "png", f);
 	}
 	
@@ -547,25 +548,5 @@ public class Steganography {
 			ret += bit * factor;
 		}
 		System.out.println(ret);
-	}
-
-	/*
-	 * Main file for testing
-	 */
-	public static void main(String[] args) throws IOException {
-		Steganography s = new Steganography();
-		long t1 = System.nanoTime();
-		s.hideMessage("Steg/TESTINPUT.txt", "Steg/coutinho.png");
-		s.unHideMessage("Steg/coutinho1.png", "Steg/newFile.txt");
-		s.getDifference("Steg/coutinho.png", "Steg/coutinho1.png");
-		long diffText = System.nanoTime() - t1;
-		System.out.println("Elapsed time for encoding and decoding text: " + diffText/1E9);
-			
-		long t2 = System.nanoTime();
-		s.hidePic("Steg/bluedevil.png", "Steg/coutinho.png");
-		s.unHidePic("Steg/coutinho2.png", "Steg/newFile.png");
-		s.getDifference("Steg/coutinho.png", "Steg/coutinho2.png");
-		long diffPic = System.nanoTime() - t2;
-		System.out.println("Elapsed time for encoding and decoding picture: " + diffPic/1E9);
 	}
 }
