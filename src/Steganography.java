@@ -1,5 +1,5 @@
 /**
- *	Basic Steganography program to hide text or image data within
+ *  Basic Steganography program to hide text or image data within
  *  the least significant red, green, and blue bits of images 
  *  supported by ImageIO.read
  *
@@ -68,7 +68,7 @@ public class Steganography {
 			int xPos = 0;
 			int yPos = 0;
 			long fileSize = new File(messagePath).length();			
-			hideHeader(x, y, xPos, yPos, fileSize, img);
+			hideHeader(xPos, yPos, fileSize, img);
 			
 			xPos = LONG_BITS % y;
 			yPos = LONG_BITS / y;
@@ -164,13 +164,13 @@ public class Steganography {
 		int imgY = img.getHeight();
 		
 		// Embed original file width
-		hideHeader(x, y, imgXPos, imgYPos, x, img);
-		imgXPos = INT_BITS % y;
-		imgYPos = INT_BITS / y;
+		hideHeader(imgXPos, imgYPos, x, img);
+		imgXPos = LONG_BITS % y;
+		imgYPos = LONG_BITS / y;
 		// Embed original file height
-		hideHeader(x, y, imgXPos, imgYPos, y, img);
-		imgXPos = (2*INT_BITS) % y;
-		imgYPos = (2*INT_BITS) / y;
+		hideHeader(imgXPos, imgYPos, y, img);
+		imgXPos = (2*LONG_BITS) % y;
+		imgYPos = (2*LONG_BITS) / y;
 		
 		for (int r = 0; r < y; r++) {
 			for (int c = 0; c < x; c++) {
@@ -225,7 +225,9 @@ public class Steganography {
 	 * @param header  Long to embed 
 	 * @param img     Image to embed header within
 	 */
-	private void hideHeader(int x, int y, int xPos, int yPos, long header, BufferedImage img) {
+	private void hideHeader(int xPos, int yPos, long header, BufferedImage img) {
+		int x = img.getWidth();
+		int y = img.getHeight();
 		for (int i = 0; i < LONG_BITS; i++) {
 			if (xPos >= x) {
 				yPos++;
@@ -257,26 +259,6 @@ public class Steganography {
 	 * @param header  int to embed 
 	 * @param img     Image to embed header within
 	 */
-	private void hideHeader(int x, int y, int xPos, int yPos, int header, BufferedImage img) {
-		for (int i = 0; i < INT_BITS; i++) {
-			if (xPos >= x) {
-				yPos++;
-				xPos = 0;
-			}
-			if (yPos >= y)
-				throw new IndexOutOfBoundsException("Message too long for medium");
-			
-			int toHide = header;
-			toHide = toHide >>> INT_BITS - 1;
-			int rgb = img.getRGB(xPos, yPos);
-			rgb = rgb >>> 1;
-			rgb = rgb << 1;
-			rgb = rgb | toHide;
-			img.setRGB(xPos, yPos, rgb);
-			header = header << 1;
-			xPos++;
-		}
-	}
 	
 	/**
 	 * Extract a message or image from the provided image and write it out
@@ -292,7 +274,7 @@ public class Steganography {
 		int x = img.getWidth();
 		int yPos = 0;
 		int xPos = 0;
-		long fileLength = retrieveLongHeader(x, y, xPos, yPos, img);
+		long fileLength = retrieveHeader(xPos, yPos, img);
 		xPos = LONG_BITS % y;
 		yPos = LONG_BITS / y;
 		
@@ -336,7 +318,9 @@ public class Steganography {
 	 * @param img   Image that holds the information
 	 * @return      A long embedded within img as a header
 	 */
-	private long retrieveLongHeader(int x, int y, int xPos, int yPos, BufferedImage img) {
+	private long retrieveHeader(int xPos, int yPos, BufferedImage img) {
+		int x = img.getWidth();
+		int y = img.getHeight();
 		long header = 0;
 		for (int i = 0; i < LONG_BITS; i++) {
 			header = header << 1;
@@ -353,32 +337,6 @@ public class Steganography {
 		return header;
 	}
 	
-	/**
-	 * Retrieve an int embedded as a header
-	 * 
-	 * @param x     Width of the image that holds the data
-	 * @param y     Height of the image that holds the data
-	 * @param xPos  x-coordinate of the pixel to begin retrieving data from
-	 * @param yPos  y-coordinate of the pixel to begin retrieving data from
-	 * @param img   Image that holds the information
-	 * @return      An int embedded within img as a header
-	 */
-	private int retrieveIntHeader(int x, int y, int xPos, int yPos, BufferedImage img) {
-		int header = 0;
-		for (int i = 0; i < INT_BITS; i++) {
-			header = header << 1;
-			if (xPos >= x) {
-				yPos++;
-				xPos = 0;
-			}
-			int rgb = img.getRGB(xPos, yPos);
-			rgb = rgb << INT_BITS - 1;
-			rgb = rgb >>> INT_BITS - 1;
-			header = header | rgb;
-			xPos++;
-		}
-		return header;
-	}
 	
 	/**
 	 * Retrieves a hidden image from within the HideBits least significant bits 
@@ -396,13 +354,13 @@ public class Steganography {
 		int xPos = 0;
 		int yPos = 0;
 		
-		int writeX = retrieveIntHeader(imgX, imgY, xPos, yPos, img);
-		xPos = INT_BITS % imgY;
-		yPos = INT_BITS / imgY;
-		int writeY = retrieveIntHeader(imgX, imgY, xPos, yPos, img);
-		xPos = (2*INT_BITS) % imgY;
-		yPos = (2*INT_BITS) / imgY;
-		BufferedImage writeTo = new BufferedImage(writeX, writeY, BufferedImage.TYPE_4BYTE_ABGR);
+		long writeX = retrieveHeader(xPos, yPos, img);
+		xPos = LONG_BITS % imgY;
+		yPos = LONG_BITS / imgY;
+		long writeY = retrieveHeader(xPos, yPos, img);
+		xPos = (2*LONG_BITS) % imgY;
+		yPos = (2*LONG_BITS) / imgY;
+		BufferedImage writeTo = new BufferedImage((int) writeX, (int) writeY, BufferedImage.TYPE_4BYTE_ABGR);
 		int red = 0;
 		int green = 0;
 		int blue = 0;
