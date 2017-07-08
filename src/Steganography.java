@@ -9,10 +9,8 @@
 
 import java.awt.Color;
 import java.awt.image.BufferedImage;
-import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
 import java.util.Arrays;
 
 import javax.imageio.ImageIO;
@@ -22,9 +20,10 @@ public class Steganography {
 	private final int RGBClearHideBits;               
 	private final int GetLastHideBits;               
 	private final int ClearHideBits;
-	private static final int BYTE_BITS = 8;   // Number of bits in a byte;
-	private static final int INT_BITS = 32;   // Number of bits in an int
-	private static final int LONG_BITS = 64;  // Number of bits in a long
+	private static final int HIDE_HEADER = Integer.MAX_VALUE - 1;  // To set the last bit from pixel file to 0
+	private static final int REVEAL_HEADER = 1;                    // To get last bit from pixel file
+	private static final int BYTE_BITS = 8;                        // Number of bits in a byte;
+	private static final int LONG_BITS = 64;                       // Number of bits in a long
 	
 	/**
 	 * Default Constructor
@@ -239,9 +238,8 @@ public class Steganography {
 			long toHide = header;
 			toHide = toHide >>> LONG_BITS - 1;
 			int rgb = img.getRGB(xPos, yPos);
-			rgb = rgb >>> 1;
-			rgb = rgb << 1;
-			rgb = rgb | (int) toHide;
+			rgb &= HIDE_HEADER;
+			rgb |= toHide;
 			img.setRGB(xPos, yPos, rgb);
 			header = header << 1;
 			xPos++;
@@ -320,7 +318,6 @@ public class Steganography {
 	 */
 	private long retrieveHeader(int xPos, int yPos, BufferedImage img) {
 		int x = img.getWidth();
-		int y = img.getHeight();
 		long header = 0;
 		for (int i = 0; i < LONG_BITS; i++) {
 			header = header << 1;
@@ -329,8 +326,7 @@ public class Steganography {
 				xPos = 0;
 			}
 			int rgb = img.getRGB(xPos, yPos);
-			rgb = rgb << INT_BITS - 1;
-			rgb = rgb >>> INT_BITS - 1;
+			rgb &= REVEAL_HEADER;
 			header = header | rgb;
 			xPos++;
 		}
@@ -354,58 +350,45 @@ public class Steganography {
 		int xPos = 0;
 		int yPos = 0;
 		
-		long writeX = retrieveHeader(xPos, yPos, img);
+		int writeX = (int) retrieveHeader(xPos, yPos, img);
 		xPos = LONG_BITS % imgY;
 		yPos = LONG_BITS / imgY;
-		long writeY = retrieveHeader(xPos, yPos, img);
+		int writeY = (int) retrieveHeader(xPos, yPos, img);
 		xPos = (2*LONG_BITS) % imgY;
 		yPos = (2*LONG_BITS) / imgY;
-		BufferedImage writeTo = new BufferedImage((int) writeX, (int) writeY, BufferedImage.TYPE_4BYTE_ABGR);
+		BufferedImage writeTo = new BufferedImage(writeX, writeY, BufferedImage.TYPE_4BYTE_ABGR);
 		int red = 0;
 		int green = 0;
 		int blue = 0;
-		int count = 0;
-		
-		int index = (yPos * imgY) + xPos;
-		int c = 0; 
-		int r = 0;
-		
-		while (yPos < imgY) {
-			if (xPos >= imgX) {
-				yPos++;
-				xPos = 0;
-			}
 
-			if (count == BYTE_BITS / HideBits) {
-				if (c >= writeX) {
-					r++;
-					c = 0;
-				}
-				if (r >= writeY)
-					break;
-				count = 0;
-				int toWrite = 255 << 8;
+		for (int r = 0; r < writeY; r++) {
+			for (int c = 0; c < writeX; c++) {
+				for (int count = 0; count < BYTE_BITS / HideBits; count++) {
+					if (xPos >= imgX) {
+						yPos++;
+						xPos = 0;
+					}
+					int rgb = img.getRGB(xPos, yPos);
+					Color col = new Color(rgb);
+					int colRed = (col.getRed() & GetLastHideBits) << (BYTE_BITS - HideBits);
+					int colGreen = (col.getGreen() & GetLastHideBits) << (BYTE_BITS - HideBits);
+					int colBlue = (col.getBlue() & GetLastHideBits) << (BYTE_BITS - HideBits);
+					red = red >> HideBits;
+					green = green >> HideBits;
+					blue = blue >> HideBits;
+					red |= colRed;
+					green |= colGreen;
+					blue |= colBlue;
+					xPos++;
+				}	
+				int toWrite = 255 << BYTE_BITS;
 				toWrite |= red;
-				toWrite = toWrite << 8;
+				toWrite = toWrite << BYTE_BITS;
 				toWrite |= green;
-				toWrite = toWrite << 8;
+				toWrite = toWrite << BYTE_BITS;
 				toWrite |= blue;
 				writeTo.setRGB(c, r, toWrite);
-				c++;
 			}
-			int rgb = img.getRGB(xPos, yPos);
-			Color col = new Color(rgb);
-			int colRed = (col.getRed() & GetLastHideBits) << 6;
-			int colGreen = (col.getGreen() & GetLastHideBits) << 6;
-			int colBlue = (col.getBlue() & GetLastHideBits) << 6;
-			red = red >> HideBits;
-			green = green >> HideBits;
-			blue = blue >> HideBits;
-			red |= colRed;
-			green |= colGreen;
-			blue |= colBlue;
-			count++;
-			xPos++;
 		}
 		// Create new file with the embedded message
 		String end = recoveredName.substring(recoveredName.length() - 3);
