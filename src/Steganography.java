@@ -12,14 +12,17 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
-
 import javax.imageio.ImageIO;
 
 public class Steganography {
-	private final int HideBits;                      
-	private final int RGBClearHideBits;               
-	private final int GetLastHideBits;               
-	private final int ClearHideBits;
+	private final int HideBits;                                    // The number of least significant bits to hide info in
+	                                                               // MUST be a factor of BYTE_BITS to work properly
+	
+	private final int RGBClearHideBits;                            // Used to clear the least significant HideBits from 
+	                                                               // red, green, and blue pixels in getRGB
+	
+	private final int GetLastHideBits;                             // Gets the HideBits least significant bits from an int
+	private final int ClearHideBits;                               // Clears HideBits least significant bits from an int
 	private static final int HIDE_HEADER = Integer.MAX_VALUE - 1;  // To set the last bit from pixel file to 0
 	private static final int REVEAL_HEADER = 1;                    // To get last bit from pixel file
 	private static final int BYTE_BITS = 8;                        // Number of bits in a byte;
@@ -60,61 +63,49 @@ public class Steganography {
 	public void hideMessage(String messagePath, String imFilePath) throws IOException {
 		BufferedImage img = ImageIO.read(new File(imFilePath));
 		BitInputStream message = new BitInputStream(messagePath);
-		try {
-			boolean writing = true;
-			int y = img.getHeight();
-			int x = img.getWidth();
-			int xPos = 0;
-			int yPos = 0;
-			long fileSize = new File(messagePath).length();			
-			hideHeader(xPos, yPos, fileSize, img);
-			
-			xPos = LONG_BITS % y;
-			yPos = LONG_BITS / y;
+		boolean writing = true;
+		int y = img.getHeight();
+		int x = img.getWidth();
+		int xPos = 0;
+		int yPos = 0;
+		long fileSize = new File(messagePath).length();		
+		
+		hideHeader(xPos, yPos, fileSize, img);
+		xPos = LONG_BITS % y;
+		yPos = LONG_BITS / y;
 
-			while (writing) {
-				if (xPos >= x) {
-					yPos++;
-					xPos = 0;
-				}
-				if (yPos >= y)
-					throw new IndexOutOfBoundsException("Message too long for medium");
-	
-				Color c  = new Color(img.getRGB(xPos, yPos));
-				int red = c.getRed();
-				int green = c.getGreen();
-				int blue = c.getBlue();
-				writing = hideBits(red, green, blue, message, img, xPos, yPos);
-				xPos++;
-			}		
-			// Create new file with the embedded message
-			String beginning = imFilePath.substring(0, imFilePath.length() - 4);
-			String end = imFilePath.substring(imFilePath.length() - 3);
-			String newFile = beginning + "1." + end;
-			File f = new File(newFile);
-			ImageIO.write(img, end, f);
-		}
-		finally {
-			message.close();
-		}
+		while (writing) {
+			if (xPos >= x) {
+				yPos++;
+				xPos = 0;
+			}
+			if (yPos >= y)
+				throw new IndexOutOfBoundsException("Message too long for medium");
+
+			Color col  = new Color(img.getRGB(xPos, yPos));
+			writing = hideBits(col, message, img, xPos, yPos);
+			xPos++;
+		}		
+		writeImgFile(imFilePath, img, true);
+		message.close();
 	}
 	
 	/**
 	 * Helper method to hide message in the least significant bits of the
 	 * red, green, and blue pixels
 	 * 
-	 * @param red       Red component of the color
-	 * @param green     Green component of the color
-	 * @param blue      Blue component of the color
+	 * @param col       Color representing the pixel at xPos, yPos
 	 * @param message   BitInputStream representing the message to be hidden
 	 * @param img       Image to hide the message in
 	 * @param xPos      x-coordinate of the pixel being modified
 	 * @param yPos      y-coordinate of the pixel being modified
 	 * @return          boolean toggle representing whether the end of the file has been reached
 	 */
-	private boolean hideBits(int red, int green, int blue, BitInputStream message, 
-			BufferedImage img, int xPos, int yPos) {
+	private boolean hideBits(Color col, BitInputStream message, BufferedImage img, int xPos, int yPos) {
 
+		int red = col.getRed();
+		int green = col.getGreen();
+		int blue = col.getBlue();
 		int secretBits = message.readBits(HideBits);
 		boolean writing = true;
 		
@@ -122,22 +113,14 @@ public class Steganography {
 			red &= ClearHideBits;
 			red |= secretBits;
 			secretBits = message.readBits(HideBits);
-		}
-		else 
-			writing = false;
-		
-		if (secretBits != -1) {
 			green &= ClearHideBits;
 			green |= secretBits;
 			secretBits = message.readBits(HideBits);
-		}else
-			writing = false;
-		
-		if (secretBits != -1) {
 			blue &= ClearHideBits;
 			blue |= secretBits;
 		}
-		else
+		
+		if (secretBits == -1)
 			writing = false;
 		
 		img.setRGB(xPos, yPos, new Color(red, green, blue).getRGB());
@@ -205,12 +188,7 @@ public class Steganography {
 				}
 			}
 		}
-		// Create new file with the embedded message
-		String beginning = imFilePath.substring(0, imFilePath.length() - 4);
-		String end = imFilePath.substring(imFilePath.length() - 3);
-		String newFile = beginning + "2." + end;
-		File f = new File(newFile);
-		ImageIO.write(img, end, f);	
+		writeImgFile(imFilePath, img, false);
 	}
 	
 	/**
@@ -397,6 +375,30 @@ public class Steganography {
 	}
 	
 	/**
+	 * Helper method for writing an image file after hiding a message or picture in it
+	 * @param fileName  The file name of the original image
+	 * @param img       The image to write
+	 * @param flag      True if the image contains text, false if it contains a picture
+	 */
+	private void writeImgFile(String fileName, BufferedImage img, boolean flag) {
+		String beginning = fileName.substring(0, fileName.length() - 4);
+		String end = fileName.substring(fileName.length() - 3);
+		String newFile = beginning;
+		
+		if (flag)
+			newFile += "1." + end;
+		else
+			newFile += "2." + end;
+		
+		File f = new File(newFile);
+		try {
+			ImageIO.write(img, end, f);
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+	
+	/**
 	 * For two images of the exact same dimensions, creates a new image in which
 	 * each pixel is the difference of the corresponding pixels of the provided 
 	 * images
@@ -479,7 +481,7 @@ public class Steganography {
 	
 	/**
 	 * Just for testing
-	 * @param s
+	 * @param s  The string representing the binary form of an int
 	 */
 	public void binaryStringtoInt(String s) {
 		int ret = 0;
