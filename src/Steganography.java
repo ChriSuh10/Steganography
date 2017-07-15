@@ -15,46 +15,63 @@ import java.util.Arrays;
 import javax.imageio.ImageIO;
 
 public class Steganography {
-	private final int HideBits;                                    // The number of least significant bits to hide info in
-	                                                               // MUST be a factor of BYTE_BITS to work properly
+	private final int NumHide;                   // The number of least significant bits to hide info in
+	                                             // MUST be a factor of BYTE_BITS to work properly
 	
-	private final int RGBClearHideBits;                            // Used to clear the least significant HideBits from 
-	                                                               // red, green, and blue pixels in getRGB
+	private final int GetLastNumHideBits;        // Gets the NumHide least significant bits from an int
+	private final int ClearNumHideBits;          // Clears NumHide least significant bits from an int
+	private final int RGBClearNumHideBits;       // Used to clear the least significant NumHide from 
+                                                 // red, green, and blue pixels in getRGB
 	
-	private final int GetLastHideBits;                             // Gets the HideBits least significant bits from an int
-	private final int ClearHideBits;                               // Clears HideBits least significant bits from an int
-	private static final int HIDE_HEADER = Integer.MAX_VALUE - 1;  // To set the last bit from pixel file to 0
-	private static final int REVEAL_HEADER = 1;                    // To get last bit from pixel file
-	private static final int BYTE_BITS = 8;                        // Number of bits in a byte;
-	private static final int LONG_BITS = 64;                       // Number of bits in a long
+	private static final int HIDE_HEADER = -2;   // To set the last bit from pixel file to 0
+	private static final int REVEAL_HEADER = 1;  // To get last bit from pixel file
+	private static final int BYTE_BITS = 8;      // Number of bits in a byte;
+	private static final int LONG_BITS = 64;     // Number of bits in a long
 	
 	/**
 	 * Default Constructor
 	 */
 	public Steganography() {
-		this.HideBits = 2;
-		this.RGBClearHideBits = 0xFFFCFCFC;
-		this.GetLastHideBits = 3;
-		this.ClearHideBits = 0x7FFFFFFC;
+		this.NumHide = 2;
+		this.GetLastNumHideBits = 3;
+		this.ClearNumHideBits = 0x7FFFFFFC;
+		this.RGBClearNumHideBits = 0xFFFCFCFC;
+	}
+	
+	/**
+	 * Constructor
+	 * Calculates other class variables based on numHide
+	 * 
+	 * @param numHide  Number of bits to hide data in
+	 */
+	public Steganography(int numHide) {
+		this.NumHide = numHide;
+		this.GetLastNumHideBits = (int) (Math.pow(2, numHide) - 1);
+		this.ClearNumHideBits = -(int) (Math.pow(2, numHide));
+		int rgb = 0;
+		rgb |= ~this.ClearNumHideBits;
+		rgb |= ~this.ClearNumHideBits << BYTE_BITS;
+		rgb |= ~this.ClearNumHideBits << (2 * BYTE_BITS);
+		this.RGBClearNumHideBits = ~rgb;
 	}
 	
 	/**
 	 * Constructor
 	 * 
 	 * @param numHide  Number of bits to hide data in
-	 * @param clear    Clears HideBits least significant bits from getRGB
-	 * @param get      Gets last HideBits bits from rgb ints
+	 * @param clear    Clears NumHide least significant bits from getRGB
+	 * @param get      Gets last NumHide bits from rgb ints
 	 * @param clear    Clears numHide least significant bits from red, green, and blue ints
 	 */
-	public Steganography(int numHide, int rgb, int get, int clear) {
-		this.HideBits = numHide;
-		this.RGBClearHideBits = rgb;
-		this.GetLastHideBits = get;
-		this.ClearHideBits = clear;
+	public Steganography(int numHide, int get, int clear,  int rgb) {
+		this.NumHide = numHide;
+		this.GetLastNumHideBits = get;
+		this.ClearNumHideBits = clear;
+		this.RGBClearNumHideBits = rgb;
 	}
 	
 	/**
-	 * Hides message within HideBits least significant bits of the file directed by imFile
+	 * Hides message within NumHide least significant bits of the file directed by imFile
 	 * 
 	 * @param messageFilePath  The path of the message to hide
 	 * @param imFilePath	   The image file path (must be supported by ImageIO) to hide the message in
@@ -83,7 +100,7 @@ public class Steganography {
 				throw new IndexOutOfBoundsException("Message too long for medium");
 
 			Color col  = new Color(img.getRGB(xPos, yPos));
-			writing = hideBits(col, message, img, xPos, yPos);
+			writing = NumHide(col, message, img, xPos, yPos);
 			xPos++;
 		}		
 		writeImgFile(imFilePath, img, true);
@@ -101,22 +118,22 @@ public class Steganography {
 	 * @param yPos      y-coordinate of the pixel being modified
 	 * @return          boolean toggle representing whether the end of the file has been reached
 	 */
-	private boolean hideBits(Color col, BitInputStream message, BufferedImage img, int xPos, int yPos) {
+	private boolean NumHide(Color col, BitInputStream message, BufferedImage img, int xPos, int yPos) {
 
 		int red = col.getRed();
 		int green = col.getGreen();
 		int blue = col.getBlue();
-		int secretBits = message.readBits(HideBits);
+		int secretBits = message.readBits(NumHide);
 		boolean writing = true;
 		
 		if (secretBits != -1) {
-			red &= ClearHideBits;
+			red &= ClearNumHideBits;
 			red |= secretBits;
-			secretBits = message.readBits(HideBits);
-			green &= ClearHideBits;
+			secretBits = message.readBits(NumHide);
+			green &= ClearNumHideBits;
 			green |= secretBits;
-			secretBits = message.readBits(HideBits);
-			blue &= ClearHideBits;
+			secretBits = message.readBits(NumHide);
+			blue &= ClearNumHideBits;
 			blue |= secretBits;
 		}
 		
@@ -128,7 +145,7 @@ public class Steganography {
 	}
 	
 	/**
-	 * Hides the given picture's information within HideBits least significant bits of
+	 * Hides the given picture's information within NumHide least significant bits of
 	 * red, green, and blue pixels of another image
 	 * 
 	 * @param picPath       The path of the file to hide
@@ -156,13 +173,13 @@ public class Steganography {
 		
 		for (int r = 0; r < y; r++) {
 			for (int c = 0; c < x; c++) {
-				int hideBits = message.getRGB(c, r);
-				Color col = new Color(hideBits);
+				int messageRGB = message.getRGB(c, r);
+				Color col = new Color(messageRGB);
 				int red = col.getRed();
 				int green = col.getGreen();
 				int blue = col.getBlue();
 				
-				for (int i = 0; i < BYTE_BITS / HideBits; i++) {
+				for (int i = 0; i < BYTE_BITS / NumHide; i++) {
 					if (imgXPos >= imgX) {
 						imgYPos++;
 						imgXPos = 0;
@@ -170,19 +187,19 @@ public class Steganography {
 					if (imgYPos >= imgY)
 						throw new IndexOutOfBoundsException("Message too long for medium");
 					int rgb = img.getRGB(imgXPos, imgYPos);
-					rgb &= RGBClearHideBits;
-					int hideFromRed = (red & GetLastHideBits) << 16;
-					int hideFromGreen = (green & GetLastHideBits) << 8;
-					int hideFromBlue = blue & GetLastHideBits;
+					rgb &= RGBClearNumHideBits;
+					int hideFromRed = (red & GetLastNumHideBits) << (2 * BYTE_BITS);
+					int hideFromGreen = (green & GetLastNumHideBits) << BYTE_BITS;
+					int hideFromBlue = blue & GetLastNumHideBits;
 					int toHide = 255 << 24;
 					toHide |= hideFromRed;
 					toHide |= hideFromGreen;
 					toHide |= hideFromBlue;
 					rgb |= toHide;
 
-					red = red >>> HideBits;
-					green = green >>> HideBits;
-					blue = blue >>> HideBits;
+					red = red >>> NumHide;
+					green = green >>> NumHide;
+					blue = blue >>> NumHide;
 					img.setRGB(imgXPos, imgYPos, rgb);
 					imgXPos++;
 				}
@@ -192,7 +209,7 @@ public class Steganography {
 	}
 	
 	/**
-	 * Helper method for embedding header information as a long in the HideBits
+	 * Helper method for embedding header information as a long in the NumHide
 	 * least significant bits of the pixel data
 	 * 
 	 * @param x       Width of the image that will hold the data
@@ -225,7 +242,7 @@ public class Steganography {
 	}
 	
 	/**
-	 * Helper method for embedding header information as a int in the HideBits
+	 * Helper method for embedding header information as a int in the NumHide
 	 * least significant bits of the pixel data
 	 * 
 	 * @param x       Width of the image that will hold the data
@@ -254,8 +271,8 @@ public class Steganography {
 		xPos = LONG_BITS % y;
 		yPos = LONG_BITS / y;
 		
-		long numIterations = ((fileLength * 8)/6) + 1; // To compensate for the fact that each 
-											           // iteration only fetches 6 bits
+		long numIterations = ((fileLength * BYTE_BITS) / (NumHide * 3)) + 1; // To compensate for the fact that each 
+											                                  // iteration only fetches NumHide * 3 bits
 		for (int i = 0; i < numIterations; i++) {
 			if (xPos >= x) {
 				yPos++;
@@ -276,12 +293,12 @@ public class Steganography {
 	 * @param out    BitOutputStream to write the hidden bits to
 	 */
 	private void getPixelBits(int red, int green, int blue, BitOutputStream out) {
-		red &= GetLastHideBits;
-		green &= GetLastHideBits;
-		blue &= GetLastHideBits;
-		out.writeBits(HideBits, red);
-		out.writeBits(HideBits, green);
-		out.writeBits(HideBits, blue);
+		red &= GetLastNumHideBits;
+		green &= GetLastNumHideBits;
+		blue &= GetLastNumHideBits;
+		out.writeBits(NumHide, red);
+		out.writeBits(NumHide, green);
+		out.writeBits(NumHide, blue);
 	}
 	
 	/**
@@ -313,7 +330,7 @@ public class Steganography {
 	
 	
 	/**
-	 * Retrieves a hidden image from within the HideBits least significant bits 
+	 * Retrieves a hidden image from within the NumHide least significant bits 
 	 * of the red, green, and blue pixels of the provided image
 	 * 
 	 * @param imFile         Path of the image file to extract data from
@@ -341,19 +358,19 @@ public class Steganography {
 
 		for (int r = 0; r < writeY; r++) {
 			for (int c = 0; c < writeX; c++) {
-				for (int count = 0; count < BYTE_BITS / HideBits; count++) {
+				for (int count = 0; count < BYTE_BITS / NumHide; count++) {
 					if (xPos >= imgX) {
 						yPos++;
 						xPos = 0;
 					}
 					int rgb = img.getRGB(xPos, yPos);
 					Color col = new Color(rgb);
-					int colRed = (col.getRed() & GetLastHideBits) << (BYTE_BITS - HideBits);
-					int colGreen = (col.getGreen() & GetLastHideBits) << (BYTE_BITS - HideBits);
-					int colBlue = (col.getBlue() & GetLastHideBits) << (BYTE_BITS - HideBits);
-					red = red >> HideBits;
-					green = green >> HideBits;
-					blue = blue >> HideBits;
+					int colRed = (col.getRed() & GetLastNumHideBits) << (BYTE_BITS - NumHide);
+					int colGreen = (col.getGreen() & GetLastNumHideBits) << (BYTE_BITS - NumHide);
+					int colBlue = (col.getBlue() & GetLastNumHideBits) << (BYTE_BITS - NumHide);
+					red = red >> NumHide;
+					green = green >> NumHide;
+					blue = blue >> NumHide;
 					red |= colRed;
 					green |= colGreen;
 					blue |= colBlue;
@@ -385,10 +402,11 @@ public class Steganography {
 		String end = fileName.substring(fileName.length() - 3);
 		String newFile = beginning;
 		
-		if (flag)
+		if (flag) {
 			newFile += "1." + end;
-		else
+		} else {
 			newFile += "2." + end;
+		}
 		
 		File f = new File(newFile);
 		try {
