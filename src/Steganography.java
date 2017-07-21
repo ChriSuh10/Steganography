@@ -1,33 +1,37 @@
 /**
- *  Basic Steganography program to hide text or image data within
- *  the least significant red, green, and blue bits of images 
- *  supported by ImageIO.read
- *  
- *   Copyright (C) 2017  Christopher Suh
- *   
- *   This file is part of Steganography
- *
- *   Steganography is free software: you can redistribute it and/or modify
- *   it under the terms of the GNU General Public License as published by
- *   the Free Software Foundation, either version 3 of the License, or
- *   (at your option) any later version.
- *
- *   Steganography is distributed in the hope that it will be useful,
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *   GNU General Public License for more details.
- *
- *   You should have received a copy of the GNU General Public License
- *   along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
+    Basic Steganography program to hide text or image data within
+    the least significant red, green, and blue bits of images 
+    supported by ImageIO.read
+    
+     Copyright (C) 2017  Christopher Suh
+     
+     This file is part of Steganography
+  
+     Steganography is free software: you can redistribute it and/or modify
+     it under the terms of the GNU General Public License as published by
+     the Free Software Foundation, either version 3 of the License, or
+     (at your option) any later version.
+  
+     Steganography is distributed in the hope that it will be useful,
+     but WITHOUT ANY WARRANTY; without even the implied warranty of
+     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+     GNU General Public License for more details.
+  
+     You should have received a copy of the GNU General Public License
+     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+  
  */
 
 import java.awt.Color;
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.Arrays;
 import javax.imageio.ImageIO;
+import im.jeanfrancois.bitio.BitInputStream;
+import im.jeanfrancois.bitio.BitOutputStream;
 
 public class Steganography {
 	private final int NumHide;                   // The number of least significant bits to hide info in
@@ -94,7 +98,7 @@ public class Steganography {
 	 */
 	public void hideMessage(String messagePath, String imFilePath) throws IOException {
 		BufferedImage img = ImageIO.read(new File(imFilePath));
-		BitInputStream message = new BitInputStream(messagePath);
+		BitInputStream message = new BitInputStream(new FileInputStream(messagePath));
 		boolean writing = true;
 		int y = img.getHeight();
 		int x = img.getWidth();
@@ -115,7 +119,7 @@ public class Steganography {
 				throw new IndexOutOfBoundsException("Message too long for medium");
 
 			Color col  = new Color(img.getRGB(xPos, yPos));
-			writing = NumHide(col, message, img, xPos, yPos);
+			writing = hideMessageBits(col, message, img, xPos, yPos);
 			xPos++;
 		}		
 		writeImgFile(imFilePath, img, true);
@@ -132,22 +136,23 @@ public class Steganography {
 	 * @param xPos      x-coordinate of the pixel being modified
 	 * @param yPos      y-coordinate of the pixel being modified
 	 * @return          boolean toggle representing whether the end of the file has been reached
+	 * @throws IOException 
 	 */
-	private boolean NumHide(Color col, BitInputStream message, BufferedImage img, int xPos, int yPos) {
+	private boolean hideMessageBits(Color col, BitInputStream message, BufferedImage img, int xPos, int yPos) throws IOException {
 
 		int red = col.getRed();
 		int green = col.getGreen();
 		int blue = col.getBlue();
-		int secretBits = message.readBits(NumHide);
+		int secretBits = message.readBinary(NumHide);
 		boolean writing = true;
 		
 		if (secretBits != -1) {
 			red &= ClearNumHideBits;
 			red |= secretBits;
-			secretBits = message.readBits(NumHide);
+			secretBits = message.readBinary(NumHide);
 			green &= ClearNumHideBits;
 			green |= secretBits;
-			secretBits = message.readBits(NumHide);
+			secretBits = message.readBinary(NumHide);
 			blue &= ClearNumHideBits;
 			blue |= secretBits;
 		}
@@ -277,7 +282,7 @@ public class Steganography {
 	 */
 	public void unHideMessage(String imFile, String outFile) throws IOException {
 		BufferedImage img = ImageIO.read(new File(imFile));
-		BitOutputStream out = new BitOutputStream(outFile);
+		BitOutputStream out = new BitOutputStream(new FileOutputStream(outFile));
 		int y = img.getHeight();
 		int x = img.getWidth();
 		int yPos = 0;
@@ -306,14 +311,15 @@ public class Steganography {
 	 * @param green  Green component of the pixel being examined
 	 * @param blue   Blue component of the pixel being examined
 	 * @param out    BitOutputStream to write the hidden bits to
+	 * @throws IOException 
 	 */
-	private void getPixelBits(int red, int green, int blue, BitOutputStream out) {
+	private void getPixelBits(int red, int green, int blue, BitOutputStream out) throws IOException {
 		red &= GetLastNumHideBits;
 		green &= GetLastNumHideBits;
 		blue &= GetLastNumHideBits;
-		out.writeBits(NumHide, red);
-		out.writeBits(NumHide, green);
-		out.writeBits(NumHide, blue);
+		out.writeBinary(red, NumHide);
+		out.writeBinary(green, NumHide);
+		out.writeBinary(blue, NumHide);
 	}
 	
 	/**
